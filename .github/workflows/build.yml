@@ -1,0 +1,86 @@
+---
+name: Build and Release
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+    branches:
+      - '**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: bbusse/github-workflows/.github/actions/setup-go@dev
+        with:
+          version: '1.26'
+
+      - name: Vet and test
+        run: |
+          set -eu
+          go vet ./...
+          go test ./...
+
+  container-build-push:
+    name: Build and push container
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: bbusse/github-workflows/.github/workflows/container-build-push.yml@dev
+    with:
+      image_name: provisioner
+      image_repository: ghcr.io/bbusse
+      container_registry: ghcr
+      container_push_to_registry: true
+
+  build-go-pkg-linux:
+    name: Build Linux binaries
+    needs: test
+    uses: bbusse/github-workflows/.github/workflows/build-go-pkg-linux.yml@dev
+    with:
+      artifact_name: provisioner
+      working_directory: cmd/provisioner
+      go_version: '1.26'
+      architectures: '["amd64", "arm64", "mips"]'
+      gomips: softfloat
+      trimpath: true
+      ldflags: -s -w
+
+  build-go-pkg-macos:
+    name: Build macOS binary
+    needs: test
+    uses: bbusse/github-workflows/.github/workflows/build-go-pkg-macos.yml@dev
+    with:
+      artifact_name: provisioner
+      working_directory: cmd/provisioner
+      go_version: '1.26'
+
+  release:
+    name: Release
+    needs:
+      - build-go-pkg-linux
+      - build-go-pkg-macos
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/ci' }}
+    permissions:
+      contents: write
+    uses: bbusse/github-workflows/.github/workflows/release.yml@dev
+    with:
+      artifact_name: provisioner
+      binary_name: provisioner
+      release_branch: ci
+      always_release: true
+    secrets: inherit
