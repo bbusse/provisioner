@@ -1,0 +1,3 @@
+https://github.com/bbusse/dotfiles	~/src/dotfiles	
+git@github.com:bbusse/notes.git	~/notes	main
+ssh://git@host/x/y/	~/src/y	

@@ -1,0 +1,1 @@
+provision: invalid provisioning file: ValueError: k8s.pki is for a k8s-master, a client must not carry the cluster CA key

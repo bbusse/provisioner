@@ -1,0 +1,24 @@
+
+[system]
+hostname = "rw-vfm"
+user = "mue"
+roles = ["tv", "wg"]
+timezone = "Europe/Berlin"
+
+[ssh]
+authorized_keys = ["ssh-ed25519 AAAA a@b", "ssh-ed25519 BBBB c@d"]
+
+[wg]
+private_key = "priv="
+address = ["10.0.0.5/32"]
+listen_port = 51820
+
+[[wg.peer]]
+public_key = "pub="
+endpoint = "vpn.example.org:51820"
+allowed_ips = ["10.0.0.0/24", "10.1.0.0/24"]
+persistent_keepalive = 25
+
+[[wg.peer]]
+public_key = "pub2="
+preshared_key = "psk="

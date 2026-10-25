@@ -1,0 +1,5 @@
+[systemd-system."a.service"]
+content = """
+[Service]
+ExecStart=/bin/true"""
+enable = true

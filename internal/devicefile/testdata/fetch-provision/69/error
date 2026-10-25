@@ -1,0 +1,1 @@
+provision: invalid provisioning file: ValueError: k8s.pki.ca_crt must be one PEM block

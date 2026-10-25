@@ -1,0 +1,2 @@
+[systemd-system."a.service"]
+enable = true

@@ -1,0 +1,2 @@
+[users.mue]
+git-clone = [{ url = "https://h/a/b", dest = "~/../x" }]

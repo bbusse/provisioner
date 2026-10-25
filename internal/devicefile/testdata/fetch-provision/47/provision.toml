@@ -1,0 +1,8 @@
+[systemd-system."a.service"]
+content = """
+[Service]
+ExecStart=/bin/true
+
+[Install]
+WantedBy=multi-user.target"""
+start = 1

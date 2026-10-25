@@ -1,0 +1,2 @@
+[ssh]
+authorized_keys = "ssh-ed25519 AAAA a@b"

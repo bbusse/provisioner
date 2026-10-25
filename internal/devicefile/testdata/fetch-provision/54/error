@@ -1,0 +1,1 @@
+provision: invalid provisioning file: ValueError: a node is either k8s-master or k8s-client

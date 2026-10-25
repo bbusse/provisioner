@@ -1,0 +1,7 @@
+[systemd-system]
+"a.service" = """
+[Service]
+ExecStart=/bin/true
+
+[Install]
+WantedBy=multi-user.target"""

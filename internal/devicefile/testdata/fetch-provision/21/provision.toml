@@ -1,0 +1,4 @@
+[wg]
+private_key = "priv="
+[[wg.peer]]
+endpoint = "x:1"

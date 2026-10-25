@@ -7,6 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"os/user"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +18,7 @@ import (
 	"github.com/bbusse/provisioner/internal/jobs"
 	"github.com/bbusse/provisioner/internal/mtls"
 	_ "github.com/bbusse/provisioner/internal/opnsense"
+	"github.com/bbusse/provisioner/internal/profiles"
 	"github.com/bbusse/provisioner/internal/router"
 	"github.com/bbusse/provisioner/internal/settings"
 )
@@ -22,6 +26,7 @@ import (
 const usage = `usage: provisioner serve
        provisioner router [-listen :8443] [-cert FILE] [-key FILE] [-ca FILE] [-dir DIR]
        provisioner fetch USER
+       provisioner fetch-profiles
        provisioner [-local] signer
        provisioner [-local] server NAME [SAN...]
        provisioner [-local] device NAME
@@ -180,6 +185,8 @@ func main() {
 		}
 		f := &fetch.Fetcher{Stdout: os.Stdout, Stderr: os.Stderr, Getenv: os.Getenv, Sleep: time.Sleep}
 		os.Exit(f.Run(user))
+	case "fetch-profiles":
+		os.Exit(fetchProfiles())
 	}
 
 	if args[0] == "devices" {
@@ -220,6 +227,39 @@ func main() {
 	if resp.Error != "" {
 		die("%s", resp.Error)
 	}
+}
+
+func fetchProfiles() int {
+	f := &profiles.Fetcher{
+		Root:   os.Getenv("PROVISION_ROOT"),
+		Stderr: os.Stderr,
+		Config: func(key string) string {
+			out, _ := exec.Command("uci", "-q", "get", "provision.main."+key).Output()
+			return strings.TrimSpace(string(out))
+		},
+		Exec: func(name string, args ...string) error {
+			return exec.Command(name, args...).Run()
+		},
+		Chown: func(path, owner string) error {
+			name, group, _ := strings.Cut(owner, ":")
+			u, err := user.Lookup(name)
+			if err != nil {
+				return err
+			}
+			g, err := user.LookupGroup(group)
+			if err != nil {
+				return err
+			}
+			uid, _ := strconv.Atoi(u.Uid)
+			gid, _ := strconv.Atoi(g.Gid)
+			return os.Chown(path, uid, gid)
+		},
+		Log: func(msg string) {
+			exec.Command("logger", "-t", "fetch-profiles", msg).Run()
+		},
+		Client: &http.Client{Timeout: 2 * time.Minute},
+	}
+	return f.Run()
 }
 
 func newClient() *api.Client {

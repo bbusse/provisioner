@@ -1,0 +1,7 @@
+[system]
+roles = ["k8s-client"]
+[k8s]
+cluster = "e2m"
+token = "abcdef.0123456789abcdef"
+ca_cert_hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+endpoint_method = "../bin/sh"

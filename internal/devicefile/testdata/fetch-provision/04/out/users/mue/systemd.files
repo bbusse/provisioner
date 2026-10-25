@@ -1,0 +1,2 @@
+syncthing.service
+syncthing.service.d/10-gui.conf

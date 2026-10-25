@@ -1,12 +1,10 @@
 package devicefile
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -243,36 +241,6 @@ enable = false
 	strings.Replace(k8sMaster("", ""), "MIIBszCCAVmgAwIBAgIU", "rm -rf /", 1),
 }
 
-func python(t *testing.T) (string, string) {
-	t.Helper()
-	ib := os.Getenv("IMAGE_BUILDER")
-	if ib == "" {
-		ib = "../../../image-builder/image-builder"
-	}
-	src, err := os.ReadFile(ib)
-	if err != nil {
-		t.Skip("no image-builder checkout, set IMAGE_BUILDER")
-	}
-	marker := "python3 - \"${toml}\" \"${out}\" <<'PY'\n"
-	i := bytes.Index(src, []byte(marker))
-	if i < 0 {
-		t.Fatal("no fetch-provision python in image-builder")
-	}
-	rest := src[i+len(marker):]
-	j := bytes.Index(rest, []byte("\nPY\n"))
-	script := filepath.Join(t.TempDir(), "apply.py")
-	if err := os.WriteFile(script, rest[:j+1], 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range []string{"python3", "python3.14", "python3.13", "python3.12", "python3.11"} {
-		if path, err := exec.LookPath(p); err == nil && exec.Command(path, "-c", "import tomllib").Run() == nil {
-			return path, script
-		}
-	}
-	t.Skip("no python with tomllib")
-	return "", ""
-}
-
 func tree(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -292,57 +260,55 @@ func tree(t *testing.T, dir string) map[string]string {
 }
 
 func TestParseMatchesFetchProvisionPython(t *testing.T) {
-	py, script := python(t)
+	cases, err := filepath.Glob(filepath.Join("testdata", "fetch-provision", "*"))
+	if err != nil || len(cases) == 0 {
+		t.Fatal("no recorded fetch-provision results")
+	}
 	accepted := 0
-	for i, doc := range corpus {
-		dir := t.TempDir()
-		src := filepath.Join(dir, "provision.toml")
-		pyOut := filepath.Join(dir, "py")
-		goOut := filepath.Join(dir, "go")
-		os.Mkdir(pyOut, 0o700)
-		os.Mkdir(goOut, 0o700)
-		os.WriteFile(src, []byte(doc), 0o600)
-		var stderr bytes.Buffer
-		cmd := exec.Command(py, script, src, pyOut)
-		cmd.Stderr = &stderr
-		pyErr := cmd.Run()
-
-		cfg, err := Parse([]byte(doc))
-		if (pyErr == nil) != (err == nil) {
-			t.Errorf("case %d: python %v (%s), go %v\n%s", i, pyErr, strings.TrimSpace(stderr.String()), err, doc)
+	for _, dir := range cases {
+		doc, err := os.ReadFile(filepath.Join(dir, "provision.toml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pyErr, err := os.ReadFile(filepath.Join(dir, "error"))
+		refused := err == nil
+		cfg, err := Parse(doc)
+		if refused != (err != nil) {
+			t.Errorf("%s: python refused %v (%s), go %v", dir, refused, strings.TrimSpace(string(pyErr)), err)
 			continue
 		}
 		if err != nil {
 			var e *Error
 			if !errors.As(err, &e) {
-				t.Errorf("case %d: %T is not an *Error", i, err)
+				t.Errorf("%s: %T is not an *Error", dir, err)
 				continue
 			}
-			want := strings.TrimSpace(stderr.String())
+			want := strings.TrimSpace(string(pyErr))
 			got := "provision: invalid provisioning file: " + err.Error()
 			if e.Kind == "TOMLDecodeError" {
 				if !strings.HasPrefix(want, "provision: invalid provisioning file: TOMLDecodeError: ") {
-					t.Errorf("case %d: python says %q", i, want)
+					t.Errorf("%s: python said %q", dir, want)
 				}
 			} else if e.Kind == "ValueError" && strings.Contains(e.Msg, "network") && strings.HasPrefix(want, "provision: invalid provisioning file: ValueError: ") {
 			} else if got != want {
-				t.Errorf("case %d:\n python %q\n go     %q", i, want, got)
+				t.Errorf("%s:\n python %q\n go     %q", dir, want, got)
 			}
 			continue
 		}
 		accepted++
+		goOut := t.TempDir()
 		if err := cfg.WriteOut(goOut); err != nil {
 			t.Fatal(err)
 		}
-		pyTree, goTree := tree(t, pyOut), tree(t, goOut)
+		pyTree, goTree := tree(t, filepath.Join(dir, "out")), tree(t, goOut)
 		for name, content := range pyTree {
 			if goTree[name] != content {
-				t.Errorf("case %d: %s\n python %q\n go     %q", i, name, content, goTree[name])
+				t.Errorf("%s: %s\n python %q\n go     %q", dir, name, content, goTree[name])
 			}
 		}
 		for name := range goTree {
 			if _, ok := pyTree[name]; !ok {
-				t.Errorf("case %d: go writes %s, python does not", i, name)
+				t.Errorf("%s: go writes %s, python did not", dir, name)
 			}
 		}
 	}

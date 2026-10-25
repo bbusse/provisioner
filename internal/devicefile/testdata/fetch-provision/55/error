@@ -1,0 +1,1 @@
+provision: invalid provisioning file: ValueError: k8s.bootstrap is for a k8s-master

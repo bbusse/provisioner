@@ -1,0 +1,61 @@
+[system]
+roles = ["k8s-master"]
+
+[k8s]
+cluster = "e2m"
+token = "abcdef.0123456789abcdef"
+ca_cert_hash = "sha256:abababababababababababababababababababababababababababababababab"
+bootstrap = true
+endpoint = "k8s.home:7443"
+endpoint_method = "dns"
+pod_cidr = "172.20.0.0/16"
+service_cidr = "fd00::/108"
+[k8s.pki]
+ca_crt = """
+-----BEGIN CERTIFICATE-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END CERTIFICATE-----
+"""
+ca_key = """
+-----BEGIN PRIVATE KEY-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END PRIVATE KEY-----
+"""
+front_proxy_ca_crt = """
+-----BEGIN CERTIFICATE-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END CERTIFICATE-----
+"""
+front_proxy_ca_key = """
+-----BEGIN PRIVATE KEY-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END PRIVATE KEY-----
+"""
+etcd_ca_crt = """
+-----BEGIN CERTIFICATE-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END CERTIFICATE-----
+"""
+etcd_ca_key = """
+-----BEGIN PRIVATE KEY-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END PRIVATE KEY-----
+"""
+sa_key = """
+-----BEGIN PRIVATE KEY-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END PRIVATE KEY-----
+"""
+sa_pub = """
+-----BEGIN CERTIFICATE-----
+MIIBszCCAVmgAwIBAgIU
+AAAA+/==
+-----END CERTIFICATE-----
+"""

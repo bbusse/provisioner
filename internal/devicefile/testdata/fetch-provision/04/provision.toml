@@ -1,0 +1,30 @@
+
+[users.zed]
+shell = "zsh"
+authorized_keys = ["ssh-ed25519 AAAA a@b"]
+git-clone = ["https://github.com/bbusse/dotfiles",
+             { url = "git@github.com:bbusse/notes.git", dest = "~/notes", ref = "main" },
+             "ssh://git@host/x/y/"]
+
+[users.zed.env]
+ZED = "1"
+EDITOR = "vim"
+ALPHA = "  spaced  "
+
+[users.alpha]
+env = { B = "2", A = "1" }
+
+[users.mue.systemd."syncthing.service"]
+content = """
+[Service]
+ExecStart=/usr/bin/syncthing serve
+
+[Install]
+WantedBy=default.target
+"""
+
+[users.mue.systemd."syncthing.service.d/10-gui.conf"]
+content = """
+[Service]
+Environment=X=1
+"""

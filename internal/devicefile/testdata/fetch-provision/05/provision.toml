@@ -1,0 +1,68 @@
+
+[systemd-system."backup.service"]
+content = """
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup
+"""
+
+[systemd-system."backup.timer"]
+content = """
+
+[Timer]
+OnCalendar=daily
+
+[Install]
+WantedBy=timers.target
+
+
+"""
+
+[systemd-system."sshd.service.d/10-port.conf"]
+content = """
+[Service]
+Environment=PORT=2222
+"""
+
+[systemd-system."tv-extra.service"]
+content = """
+[Service]
+ExecStart=/bin/true
+
+[Install]
+WantedBy=role-tv.target
+"""
+start = false
+
+[systemd-system."once.service"]
+content = """
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+"""
+start = true
+
+[systemd-system."getty@.service"]
+content = """
+[Service]
+ExecStart=/bin/true
+"""
+
+[systemd-user."syncthing.service"]
+content = """
+[Service]
+ExecStart=/usr/bin/syncthing serve
+
+[Install]
+WantedBy=default.target
+"""
+
+[systemd-user."quiet.service"]
+content = """
+[Service]
+ExecStart=/bin/true
+
+[Install]
+WantedBy=default.target
+"""
+enable = false

@@ -4,7 +4,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -359,61 +358,5 @@ func TestAddRole(t *testing.T) {
 	}
 	if _, err := addRole("[system]\nroles = [\n\"tv\"]\n", "wg"); err == nil {
 		t.Error("a multi-line roles list")
-	}
-}
-
-func TestCfgProvisionReadsWhatGoWrites(t *testing.T) {
-	script := os.Getenv("CFG_PROVISION")
-	if script == "" {
-		script = "../../../cfg-provision"
-	}
-	script = filepath.Join(script, "cfg-provision")
-	if _, err := os.Stat(script); err != nil {
-		t.Skip("no cfg-provision checkout, set CFG_PROVISION")
-	}
-	var openssl string
-	for _, p := range []string{"/opt/homebrew/bin/openssl", "/usr/local/bin/openssl", "openssl"} {
-		if path, err := exec.LookPath(p); err == nil {
-			if out, err := exec.Command(path, "version").Output(); err == nil && strings.HasPrefix(string(out), "OpenSSL ") && !strings.HasPrefix(string(out), "OpenSSL 1.") {
-				openssl = path
-				break
-			}
-		}
-	}
-	if openssl == "" {
-		t.Skip("no OpenSSL 3 or later")
-	}
-	e := setup(t)
-	e.signer()
-	e.must(e.j.Cluster(ClusterOptions{Name: "e2m"}))
-	e.must(e.j.Config(ConfigOptions{Name: "dev", User: "mue", K8s: "e2m:master"}))
-	run := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command(script, args...)
-		cmd.Env = append(os.Environ(), "CFG_PROVISION_ENV=/dev/null",
-			"CFG_PROVISION_CERTS="+e.j.S.CertsDir, "CFG_PROVISION_PLAIN="+e.j.S.PlainDir,
-			"CFG_PROVISION_DEVICES="+e.j.S.DevicesDir,
-			"PATH="+filepath.Dir(openssl)+string(os.PathListSeparator)+os.Getenv("PATH"))
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("cfg-provision %v: %v\n%s", args, err, out)
-		}
-		return string(out)
-	}
-	if out := run("seal", "dev"); !strings.Contains(out, "sealed already") {
-		t.Errorf("bash seals Go's file again: %s", out)
-	}
-	before, _ := os.ReadFile(e.j.Store.PlainPath("dev"))
-	os.Remove(e.j.Store.PlainPath("dev"))
-	run("open", "dev")
-	after, _ := os.ReadFile(e.j.Store.PlainPath("dev"))
-	if string(before) != string(after) {
-		t.Error("bash opens Go's file to something else")
-	}
-	e.device("dev2")
-	run("k8s", "dev2", "e2m", "master")
-	cfg := e.plain("dev2")
-	if _, ok := cfg["k8s"].(map[string]any)["bootstrap"]; ok {
-		t.Error("bash does not see Go's master")
 	}
 }
