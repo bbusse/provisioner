@@ -1,0 +1,24 @@
+[Unit]
+Description=provisioner serve, the provisioning API
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=localhost/provisioner
+Pull=never
+ContainerName=provisioner
+PublishPort=8444:8444
+Volume=%h/cfg-provision:/data:Z
+Volume=%h/.config/provisioner:/config:ro,Z
+Environment=PROVISIONER_TLS_CERT=/config/server.pem
+Environment=PROVISIONER_TLS_KEY=/config/server.key
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=all
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=60
+
+[Install]
+WantedBy=default.target
