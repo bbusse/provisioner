@@ -1,1 +1,1 @@
-provision: invalid provisioning file: ValueError: users.mue must be a table
+provision: invalid provisioning file: ValueError: users.bob must be a table

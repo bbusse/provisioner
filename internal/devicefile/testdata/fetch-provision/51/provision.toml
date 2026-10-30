@@ -1,4 +1,4 @@
-[users.mue.systemd."a.service"]
+[users.bob.systemd."a.service"]
 content = """
 [Service]
 ExecStart=/bin/true

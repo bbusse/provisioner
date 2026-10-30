@@ -9,9 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -27,12 +25,7 @@ type Response struct {
 	Error string   `json:"error,omitempty"`
 }
 
-type Device struct {
-	Name   string `json:"name"`
-	Plain  bool   `json:"plain"`
-	Sealed bool   `json:"sealed"`
-	Cert   bool   `json:"cert"`
-}
+type Device = store.Device
 
 type Server struct {
 	Settings *settings.Settings
@@ -98,6 +91,15 @@ func (s *Server) Handler() http.Handler {
 		}
 		o.Name = r.PathValue("name")
 		return j.Cluster(o)
+	}))
+	mux.HandleFunc("POST /v1/clusters/{name}/flux", s.job(func(j *jobs.Jobs, r *http.Request, body []byte) error {
+		var req struct {
+			URL string `json:"url"`
+		}
+		if err := decode(body, &req); err != nil {
+			return err
+		}
+		return j.Flux(r.PathValue("name"), req.URL)
 	}))
 	mux.HandleFunc("POST /v1/seal", s.job(func(j *jobs.Jobs, r *http.Request, body []byte) error {
 		var req struct {
@@ -175,24 +177,7 @@ func (s *Server) job(run func(*jobs.Jobs, *http.Request, []byte) error) http.Han
 
 func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	st := &store.Store{Certs: s.Settings.CertsDir, Plain: s.Settings.PlainDir, Devices: s.Settings.DevicesDir}
-	names := map[string]bool{}
-	for _, pattern := range []string{filepath.Join(st.Plain, "*.toml"), filepath.Join(st.Devices, "*.cms")} {
-		matches, _ := filepath.Glob(pattern)
-		for _, m := range matches {
-			name := strings.TrimSuffix(filepath.Base(m), filepath.Ext(m))
-			if store.CheckName(name) == nil {
-				names[name] = true
-			}
-		}
-	}
-	var out []Device
-	for name := range names {
-		_, plainErr := os.Stat(st.PlainPath(name))
-		_, sealedErr := os.Stat(st.SealedPath(name))
-		out = append(out, Device{Name: name, Plain: plainErr == nil, Sealed: sealedErr == nil, Cert: st.HasCert(name)})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	reply(w, http.StatusOK, out)
+	reply(w, http.StatusOK, st.List())
 }
 
 type Client struct {

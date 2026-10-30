@@ -26,14 +26,14 @@ func k8sMaster(extra string, skip string) string {
 		}
 		fmt.Fprintf(&pki, "%s = \"\"\"\n%s\"\"\"\n", f.Name, pem(kind))
 	}
-	return "[system]\nroles = [\"k8s-master\"]\n\n[k8s]\ncluster = \"e2m\"\ntoken = \"abcdef.0123456789abcdef\"\n" +
+	return "[system]\nroles = [\"k8s-master\"]\n\n[k8s]\ncluster = \"example\"\ntoken = \"abcdef.0123456789abcdef\"\n" +
 		"ca_cert_hash = \"sha256:" + strings.Repeat("ab", 32) + "\"\nbootstrap = true\n" + extra + "\n[k8s.pki]\n" + pki.String()
 }
 
 const k8sClient = `[system]
 roles = ["k8s-client"]
 [k8s]
-cluster = "e2m"
+cluster = "example"
 token = "abcdef.0123456789abcdef"
 ca_cert_hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 `
@@ -48,8 +48,8 @@ WantedBy=multi-user.target`
 var corpus = []string{
 	`
 [system]
-hostname = "rw-vfm"
-user = "mue"
+hostname = "test-host"
+user = "bob"
 roles = ["tv", "wg"]
 timezone = "Europe/Berlin"
 
@@ -71,15 +71,15 @@ persistent_keepalive = 25
 public_key = "pub2="
 preshared_key = "psk="
 `,
-	"[system]\nhostname = \"rw-vfm\"",
+	"[system]\nhostname = \"test-host\"",
 	"[system]\nhostname = 42\nroles = []",
 	"",
 	`
 [users.zed]
 shell = "zsh"
 authorized_keys = ["ssh-ed25519 AAAA a@b"]
-git-clone = ["https://github.com/bbusse/dotfiles",
-             { url = "git@github.com:bbusse/notes.git", dest = "~/notes", ref = "main" },
+git-clone = ["https://github.com/example/dotfiles",
+             { url = "git@github.com:example/notes.git", dest = "~/notes", ref = "main" },
              "ssh://git@host/x/y/"]
 
 [users.zed.env]
@@ -90,7 +90,7 @@ ALPHA = "  spaced  "
 [users.alpha]
 env = { B = "2", A = "1" }
 
-[users.mue.systemd."syncthing.service"]
+[users.bob.systemd."syncthing.service"]
 content = """
 [Service]
 ExecStart=/usr/bin/syncthing serve
@@ -99,7 +99,7 @@ ExecStart=/usr/bin/syncthing serve
 WantedBy=default.target
 """
 
-[users.mue.systemd."syncthing.service.d/10-gui.conf"]
+[users.bob.systemd."syncthing.service.d/10-gui.conf"]
 content = """
 [Service]
 Environment=X=1
@@ -188,27 +188,27 @@ enable = false
 	"[ssh]\nauthorized_keys = \"ssh-ed25519 AAAA a@b\"",
 	"[ssh]\nauthorized_keys = [[\"x\"]]",
 	"[wg]\naddress = [\"10.0.0.5/32\"]",
-	"system = \"rw-vfm\"\n[ssh]\nauthorized_keys = []",
+	"system = \"test-host\"\n[ssh]\nauthorized_keys = []",
 	"[wg]\nprivate_key = \"priv=\"\npeer = \"pub=\"",
 	"[wg]\nprivate_key = \"priv=\"\n[[wg.peer]]\nendpoint = \"x:1\"",
-	"[system]\nuser = \"Mue Root\"",
+	"[system]\nuser = \"Bob Root\"",
 	"[system]\nuser = \"../etc\"",
 	"[system]\nroles = \"tv\"",
 	"[system]\nroles = [\"../tv\"]",
 	"[system]\ntimezone = \"Europe/../Berlin\"",
-	"[users.Mue]\nshell = \"zsh\"",
+	"[users.Bob]\nshell = \"zsh\"",
 	"[users]\nmue = \"zsh\"",
-	"[users.mue]\nshell = \"../bin/sh\"",
-	"[users.mue]\nshell = \"/bin/sh;reboot\"",
-	"[users.mue.env]\n\"BAD-NAME\" = \"x\"",
-	"[users.mue.env]\nA = [\"x\"]",
-	"[users.mue]\ngit-clone = \"https://github.com/a/b\"",
-	"[users.mue]\ngit-clone = [\"file:///etc\"]",
-	"[users.mue]\ngit-clone = [{ dest = \"~/x\" }]",
-	"[users.mue]\ngit-clone = [{ url = \"https://h/a/b\", dest = \"relative\" }]",
-	"[users.mue]\ngit-clone = [{ url = \"https://h/a/b\", dest = \"~/../x\" }]",
-	"[users.mue]\ngit-clone = [{ url = \"https://h/a/b\", ref = \"a\tb\" }]",
-	"[users.mue]\ngit-clone = [42]",
+	"[users.bob]\nshell = \"../bin/sh\"",
+	"[users.bob]\nshell = \"/bin/sh;reboot\"",
+	"[users.bob.env]\n\"BAD-NAME\" = \"x\"",
+	"[users.bob.env]\nA = [\"x\"]",
+	"[users.bob]\ngit-clone = \"https://github.com/a/b\"",
+	"[users.bob]\ngit-clone = [\"file:///etc\"]",
+	"[users.bob]\ngit-clone = [{ dest = \"~/x\" }]",
+	"[users.bob]\ngit-clone = [{ url = \"https://h/a/b\", dest = \"relative\" }]",
+	"[users.bob]\ngit-clone = [{ url = \"https://h/a/b\", dest = \"~/../x\" }]",
+	"[users.bob]\ngit-clone = [{ url = \"https://h/a/b\", ref = \"a\tb\" }]",
+	"[users.bob]\ngit-clone = [42]",
 	"[systemd-system.\"../evil.service\"]\ncontent = \"\"\"" + unitInstall + "\"\"\"",
 	"[systemd-system.\"evil\"]\ncontent = \"\"\"" + unitInstall + "\"\"\"",
 	"[systemd-system.\"a.service.d/../../x.conf\"]\ncontent = \"\"\"" + unitInstall + "\"\"\"",
@@ -220,22 +220,22 @@ enable = false
 	"[systemd-user.\"a.service\"]\ncontent = \"\"\"" + unitInstall + "\"\"\"\nstart = true",
 	"[systemd-system.\"a.service\"]\nenable = true",
 	"[systemd-system]\n\"a.service\" = \"\"\"" + unitInstall + "\"\"\"",
-	"[users.mue.systemd.\"a.service\"]\ncontent = \"\"\"" + unitInstall + "\"\"\"\nstart = true",
-	"[users.mue]\nsystemd = \"a.service\"",
+	"[users.bob.systemd.\"a.service\"]\ncontent = \"\"\"" + unitInstall + "\"\"\"\nstart = true",
+	"[users.bob]\nsystemd = \"a.service\"",
 	"[system]\nroles = [\"k8s-client\"]",
-	"[system]\nroles = [\"k8s-master\", \"k8s-client\"]\n[k8s]\ncluster = \"e2m\"",
+	"[system]\nroles = [\"k8s-master\", \"k8s-client\"]\n[k8s]\ncluster = \"example\"",
 	k8sClient + "bootstrap = true",
 	k8sClient + "[k8s.pki]\nca_key = \"\"\"" + pem("EC PRIVATE KEY") + "\"\"\"",
 	strings.Replace(k8sClient, "abcdef.0123456789abcdef", "abcdef0123456789abcdef", 1),
 	strings.Replace(k8sClient, "sha256:0000000000000000000000000000000000000000000000000000000000000000", "sha256:abc", 1),
 	k8sClient + "pod_cidr = \"10.244.0.1/16\"",
 	k8sClient + "pod_cidr = \"not-a-net\"",
-	k8sClient + "endpoint = \"e2m.k8s.internal\"",
-	k8sClient + "endpoint = \"e2m.k8s.internal:+80\"",
-	k8sClient + "endpoint = \"e2m.k8s.internal:65536\"",
+	k8sClient + "endpoint = \"example.k8s.internal\"",
+	k8sClient + "endpoint = \"example.k8s.internal:+80\"",
+	k8sClient + "endpoint = \"example.k8s.internal:65536\"",
 	k8sClient + "endpoint_method = \"../bin/sh\"",
 	k8sClient + "bootstrap = \"yes\"",
-	strings.Replace(k8sClient, "cluster = \"e2m\"", "cluster = \"E2M; reboot\"", 1),
+	strings.Replace(k8sClient, "cluster = \"example\"", "cluster = \"EXAMPLE; reboot\"", 1),
 	strings.Replace(k8sClient, "token = \"abcdef.0123456789abcdef\"\n", "", 1),
 	k8sMaster("", "sa_pub"),
 	strings.Replace(k8sMaster("", ""), "MIIBszCCAVmgAwIBAgIU", "rm -rf /", 1),
@@ -326,7 +326,7 @@ func TestUsersKeepTheirOrder(t *testing.T) {
 	for _, u := range cfg.Users {
 		names = append(names, u.Name)
 	}
-	if strings.Join(names, " ") != "zed alpha mue" {
+	if strings.Join(names, " ") != "zed alpha bob" {
 		t.Errorf("users in %v", names)
 	}
 	if strings.Join(cfg.Users[0].Env, " ") != "ZED=1 EDITOR=vim ALPHA=spaced" {
@@ -334,5 +334,40 @@ func TestUsersKeepTheirOrder(t *testing.T) {
 	}
 	if strings.Join(cfg.Users[1].Env, " ") != "B=2 A=1" {
 		t.Errorf("inline env in %v", cfg.Users[1].Env)
+	}
+}
+
+func TestK8sFluxIsForMasters(t *testing.T) {
+	const hosts = "[git.example.org]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+	flux := func(identity, known string) string {
+		return "\n[k8s.flux]\nidentity = \"\"\"\n" + identity + "\"\"\"\nknown_hosts = \"\"\"\n" + known + "\n\"\"\"\n"
+	}
+	good := k8sMaster("", "") + flux(pem("OPENSSH PRIVATE KEY"), hosts)
+	cfg, err := Parse([]byte(good))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.K8s.Flux) != 2 || cfg.K8s.Flux[1].PEM != hosts {
+		t.Errorf("flux %+v", cfg.K8s.Flux)
+	}
+	out := t.TempDir()
+	if err := cfg.WriteOut(out); err != nil {
+		t.Fatal(err)
+	}
+	if files := tree(t, out); files["k8s-flux/known_hosts"] != hosts+"\n" || !strings.Contains(files["k8s-flux/identity"], "OPENSSH PRIVATE KEY") {
+		t.Errorf("wrote %v", files)
+	}
+	if cfg, err := Parse([]byte(k8sMaster("", ""))); err != nil || cfg.K8s.Flux != nil {
+		t.Errorf("a master without flux: %v %+v", err, cfg)
+	}
+	for _, bad := range []string{
+		k8sClient + flux(pem("OPENSSH PRIVATE KEY"), hosts),
+		k8sMaster("", "") + flux("not a key\n", hosts),
+		k8sMaster("", "") + flux(pem("OPENSSH PRIVATE KEY"), "git.example.org not-a-key"),
+		k8sMaster("", "") + flux(pem("OPENSSH PRIVATE KEY"), ""),
+	} {
+		if _, err := Parse([]byte(bad)); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
 	}
 }

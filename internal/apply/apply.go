@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bbusse/provisioner/internal/devicefile"
 )
@@ -166,7 +167,32 @@ func (a *Applier) renameUser(old, new string) string {
 		a.fail("user %s already exists, not renaming %s", new, old)
 		return old
 	}
+	account, err := user.Lookup(old)
+	if err != nil {
+		a.fail("no user %s: %v", old, err)
+		return old
+	}
+	_, err = os.Stat(a.path("/var/lib/systemd/linger/" + old))
+	lingering := err == nil
+	running := a.unitsOf(old)
+	for _, u := range running {
+		a.run("systemctl", "stop", u)
+	}
+	a.quiet("loginctl", "terminate-user", old)
+	if lingering {
+		a.run("loginctl", "disable-linger", old)
+		a.run("systemctl", "stop", "user@"+account.Uid+".service")
+	}
+	for i := 0; i < 50 && busy(account.Uid); i++ {
+		time.Sleep(200 * time.Millisecond)
+	}
 	if !a.run("usermod", "-l", new, "-d", "/home/"+new, "-m", old) {
+		if lingering {
+			a.run("loginctl", "enable-linger", old)
+		}
+		for _, u := range running {
+			a.run("systemctl", "start", u)
+		}
 		a.fail("could not rename user %s to %s", old, new)
 		return old
 	}
@@ -212,8 +238,66 @@ func (a *Applier) renameUser(old, new string) string {
 		a.run("systemctl", "--no-block", "stop", u)
 		a.run("systemctl", "--no-block", "start", u[:strings.LastIndex(u, "@")]+"@"+new+".service")
 	}
+	for _, u := range running {
+		a.run("systemctl", "--no-block", "start", renamed(u, old, new))
+	}
+	if lingering {
+		a.run("loginctl", "enable-linger", new)
+	}
 	a.say("renamed user %s to %s", old, new)
 	return new
+}
+
+func renamed(unit, old, new string) string {
+	if strings.HasSuffix(unit, "@"+old+".service") {
+		return strings.TrimSuffix(unit, "@"+old+".service") + "@" + new + ".service"
+	}
+	return unit
+}
+
+func (a *Applier) unitsOf(name string) []string {
+	var units []string
+	wants, _ := filepath.Glob(a.path("/etc/systemd/system/*.wants/*@" + name + ".service"))
+	for _, l := range wants {
+		units = append(units, filepath.Base(l))
+	}
+	dropins, _ := filepath.Glob(a.path("/etc/systemd/system/*.service.d/user.conf"))
+	for _, f := range dropins {
+		if listed(f, "User="+name) {
+			units = append(units, strings.TrimSuffix(filepath.Base(filepath.Dir(f)), ".d"))
+		}
+	}
+	sort.Strings(units)
+	var up []string
+	for i, u := range units {
+		if i > 0 && u == units[i-1] {
+			continue
+		}
+		switch output("systemctl", "show", "-P", "ActiveState", u) {
+		case "active", "activating", "reloading":
+			up = append(up, u)
+		}
+	}
+	return up
+}
+
+func busy(uid string) bool {
+	files, _ := filepath.Glob("/proc/[0-9]*/status")
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, l := range strings.Split(string(data), "\n") {
+			if fields := strings.Fields(l); len(fields) > 1 && fields[0] == "Uid:" {
+				if fields[1] == uid {
+					return true
+				}
+				break
+			}
+		}
+	}
+	return false
 }
 
 func (a *Applier) hostname(name string) {
@@ -434,6 +518,16 @@ func (a *Applier) k8s(k *devicefile.K8s) {
 		os.Chmod(dir, 0o700)
 		for _, f := range k.PKI {
 			if err := installFile(filepath.Join(dir, f.Name), []byte(f.PEM+"\n"), 0o600, 0, 0, false); err != nil {
+				a.fail("could not install %s: %v", f.Name, err)
+			}
+		}
+	}
+	flux := a.path("/etc/provision/k8s-flux")
+	os.RemoveAll(flux)
+	if len(k.Flux) > 0 {
+		os.MkdirAll(flux, 0o700)
+		for _, f := range k.Flux {
+			if err := installFile(filepath.Join(flux, f.Name), []byte(f.PEM+"\n"), 0o600, 0, 0, false); err != nil {
 				a.fail("could not install %s: %v", f.Name, err)
 			}
 		}

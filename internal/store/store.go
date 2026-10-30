@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -44,6 +46,36 @@ func (s *Store) SealedPath(name string) string {
 func Exists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Size() > 0
+}
+
+// Device is what the data holds for one device
+type Device struct {
+	Name   string `json:"name"`
+	Plain  bool   `json:"plain"`
+	Sealed bool   `json:"sealed"`
+	Cert   bool   `json:"cert"`
+}
+
+// List is every device with a plain or sealed file, by name
+func (s *Store) List() []Device {
+	names := map[string]bool{}
+	for _, pattern := range []string{filepath.Join(s.Plain, "*.toml"), filepath.Join(s.Devices, "*.cms")} {
+		matches, _ := filepath.Glob(pattern)
+		for _, m := range matches {
+			name := strings.TrimSuffix(filepath.Base(m), filepath.Ext(m))
+			if CheckName(name) == nil {
+				names[name] = true
+			}
+		}
+	}
+	var out []Device
+	for name := range names {
+		_, plainErr := os.Stat(s.PlainPath(name))
+		_, sealedErr := os.Stat(s.SealedPath(name))
+		out = append(out, Device{Name: name, Plain: plainErr == nil, Sealed: sealedErr == nil, Cert: s.HasCert(name)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 func (s *Store) HasCert(name string) bool {

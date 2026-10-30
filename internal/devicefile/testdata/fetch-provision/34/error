@@ -1,1 +1,1 @@
-provision: invalid provisioning file: ValueError: users.mue.git-clone: file:///etc is not an https, ssh or git URL
+provision: invalid provisioning file: ValueError: users.bob.git-clone: file:///etc is not an https, ssh or git URL

@@ -1,6 +1,9 @@
 package fetch
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestPickService(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
@@ -14,5 +17,32 @@ func TestPickService(t *testing.T) {
 		if got := pickService([]byte(c.in)); got != c.want {
 			t.Errorf("%s: %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestInSessionOf(t *testing.T) {
+	for _, c := range []struct {
+		cgroup string
+		want   bool
+	}{
+		{"0::/user.slice/user-1000.slice/session-3.scope\n", true},
+		{"0::/user.slice/user-1000.slice/user@1000.service/app.slice/x.service\n", true},
+		{"0::/user.slice/user-10000.slice/session-3.scope\n", false},
+		{"0::/system.slice/fetch-provision@moonshine.service\n", false},
+		{"0::/\n", false},
+		{"", false},
+	} {
+		if got := inSessionOf([]byte(c.cgroup), "1000"); got != c.want {
+			t.Errorf("%q: %v, want %v", c.cgroup, got, c.want)
+		}
+	}
+}
+
+func TestDetachArgs(t *testing.T) {
+	env := map[string]string{"PATH": "/usr/bin", "PROVISION_ESP": "/efi", "HOME": "/root"}
+	got := strings.Join(detachArgs("/usr/local/bin/provisioner", "moonshine", func(k string) string { return env[k] }), " ")
+	want := "--unit=provision-fetch --collect --quiet --setenv=PATH=/usr/bin --setenv=PROVISION_ESP=/efi /usr/local/bin/provisioner fetch moonshine"
+	if got != want {
+		t.Errorf("%s, want %s", got, want)
 	}
 }

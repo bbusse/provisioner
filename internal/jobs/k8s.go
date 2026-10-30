@@ -329,25 +329,18 @@ func (j *Jobs) k8sJoin(device, cluster, role string, signer *store.Signer) error
 			}
 			fmt.Fprintf(&b, "%s = \"\"\"\n%s\n\"\"\"\n", f[0], strings.TrimRight(string(pem), "\n"))
 		}
+		flux, err := fluxSection(j.S.CertsDir, cluster)
+		if err != nil {
+			return err
+		}
+		b.WriteString(flux)
 	}
 	out, err := addRole(b.String(), "k8s-"+role)
 	if err != nil {
 		return fmt.Errorf("could not add %s to %s: %w", cluster, plainPath, err)
 	}
-	work, err := os.MkdirTemp(j.Store.Plain, ".k8s.")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(work)
-	candidate := filepath.Join(work, device+".toml")
-	if err := os.WriteFile(candidate, []byte(out), 0o600); err != nil {
-		return err
-	}
-	if err := j.Store.CheckTOML(candidate); err != nil {
+	if err := j.writeChecked(device, out); err != nil {
 		return fmt.Errorf("could not add %s to %s: %w", cluster, plainPath, err)
-	}
-	if err := store.WriteFile(plainPath, []byte(out), 0o600); err != nil {
-		return err
 	}
 	suffix := ""
 	if bootstrap {

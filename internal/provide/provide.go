@@ -1,4 +1,4 @@
-package router
+package provide
 
 import (
 	"context"
@@ -37,21 +37,24 @@ var deviceFiles = []struct{ ext, contentType string }{
 	{".toml", "application/toml"},
 }
 
+// PROVISIONER_ROUTER_* are the deprecated names
 func env(name, def string) string {
-	if v := os.Getenv(name); v != "" {
-		return v
+	for _, prefix := range []string{"PROVISIONER_PROVIDE_", "PROVISIONER_ROUTER_"} {
+		if v := os.Getenv(prefix + name); v != "" {
+			return v
+		}
 	}
 	return def
 }
 
 func Run(args []string) {
 	var o options
-	fs := flag.NewFlagSet("provisioner router", flag.ExitOnError)
-	fs.StringVar(&o.listen, "listen", env("PROVISIONER_ROUTER_LISTEN", ":8443"), "address to listen on")
-	fs.StringVar(&o.cert, "cert", env("PROVISIONER_ROUTER_CERT", "/etc/lighttpd/server.pem"), "server certificate (PEM)")
-	fs.StringVar(&o.key, "key", env("PROVISIONER_ROUTER_KEY", "/etc/lighttpd/server.key"), "server key (PEM)")
-	fs.StringVar(&o.ca, "ca", env("PROVISIONER_ROUTER_CA", "/etc/provision/ca.pem"), "CA that issues the client certificates (PEM)")
-	fs.StringVar(&o.dir, "dir", env("PROVISIONER_ROUTER_DIR", "/etc/provision"), "directory with <CN>.cms and <CN>.toml")
+	fs := flag.NewFlagSet("provisioner provide", flag.ExitOnError)
+	fs.StringVar(&o.listen, "listen", env("LISTEN", ":8443"), "address to listen on")
+	fs.StringVar(&o.cert, "cert", env("CERT", "/etc/lighttpd/server.pem"), "server certificate (PEM)")
+	fs.StringVar(&o.key, "key", env("KEY", "/etc/lighttpd/server.key"), "server key (PEM)")
+	fs.StringVar(&o.ca, "ca", env("CA", "/etc/provision/ca.pem"), "CA that issues the client certificates (PEM)")
+	fs.StringVar(&o.dir, "dir", env("DIR", "/etc/provision"), "directory with <CN>.cms and <CN>.toml")
 	fs.Parse(args)
 	log.SetFlags(0)
 

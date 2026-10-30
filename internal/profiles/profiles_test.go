@@ -20,6 +20,7 @@ type env struct {
 	repo     string
 	config   map[string]string
 	enabled  map[string]bool
+	running  map[string]bool
 	services []string
 	chowns   []string
 	requests []*http.Request
@@ -33,8 +34,8 @@ type env struct {
 }
 
 func newEnv(t *testing.T) *env {
-	e := &env{t: t, root: t.TempDir(), config: map[string]string{}, enabled: map[string]bool{}, status: http.StatusOK}
-	e.repo = filepath.Join(t.TempDir(), "bbusse-cfg-provision-abc1234")
+	e := &env{t: t, root: t.TempDir(), config: map[string]string{}, enabled: map[string]bool{}, running: map[string]bool{}, status: http.StatusOK}
+	e.repo = filepath.Join(t.TempDir(), "example-cfg-provision-abc1234")
 	e.write("router/www-provision/cgi-bin/provision", "#!/bin/sh\necho cgi\n")
 	e.write("router/etc/lighttpd/lighttpd.conf", "server.port = 8443\n")
 	e.write("router/etc/init.d/provisioner", "#!/bin/sh /etc/rc.common\nPROG=/usr/sbin/provisioner\n")
@@ -105,11 +106,21 @@ func (e *env) run() int {
 				return nil
 			}
 			service := filepath.Base(name)
-			if len(args) == 1 && args[0] == "enabled" {
+			switch args[0] {
+			case "enabled":
 				if e.enabled[service] {
 					return nil
 				}
 				return errors.New("disabled")
+			case "running":
+				if e.running[service] {
+					return nil
+				}
+				return errors.New("not running")
+			case "enable", "disable":
+				e.enabled[service] = args[0] == "enable"
+			case "start", "restart", "stop":
+				e.running[service] = args[0] != "stop"
 			}
 			e.services = append(e.services, service+" "+strings.Join(args, " "))
 			return nil
@@ -173,7 +184,7 @@ func (e *env) wantServices(want ...string) {
 	}
 }
 
-const repo = "https://github.com/bbusse/cfg-provision"
+const repo = "https://github.com/example/cfg-provision"
 
 func TestNothingHappensWithoutARepository(t *testing.T) {
 	e := newEnv(t)
@@ -187,23 +198,23 @@ func TestNothingHappensWithoutARepository(t *testing.T) {
 
 func TestAGithubRepositoryIsFetchedAsATarball(t *testing.T) {
 	e := newEnv(t)
-	e.config["repo"] = "https://github.com/bbusse/cfg-provision.git"
+	e.config["repo"] = "https://github.com/example/cfg-provision.git"
 	e.config["token"] = "tok123"
 	e.run()
 	r := e.requests[0]
-	if r.URL.String() != "https://api.github.com/repos/bbusse/cfg-provision/tarball/main" {
+	if r.URL.String() != "https://api.github.com/repos/example/cfg-provision/tarball/main" {
 		t.Errorf("fetched %s", r.URL)
 	}
 	if r.Header.Get("Authorization") != "Bearer tok123" {
 		t.Errorf("authorization %q", r.Header.Get("Authorization"))
 	}
 
-	e.config["repo"] = "https://github.com/bbusse/cfg-provision/"
+	e.config["repo"] = "https://github.com/example/cfg-provision/"
 	e.config["ref"] = "v2"
 	e.config["token"] = ""
 	e.run()
 	r = e.requests[1]
-	if r.URL.String() != "https://api.github.com/repos/bbusse/cfg-provision/tarball/v2" {
+	if r.URL.String() != "https://api.github.com/repos/example/cfg-provision/tarball/v2" {
 		t.Errorf("fetched %s", r.URL)
 	}
 	if r.Header.Get("Authorization") != "" {
@@ -362,6 +373,42 @@ func TestAChangedInitScriptRestartsProvisioner(t *testing.T) {
 		t.Error("not updated")
 	}
 	e.wantServices("provisioner enable", "provisioner restart")
+}
+
+func TestAKeptProvisionerThatIsNotRunningIsStarted(t *testing.T) {
+	e := newEnv(t)
+	e.config["repo"] = repo
+	e.rootFile("/etc/init.d/provisioner", "#!/bin/sh /etc/rc.common\nPROG=/usr/sbin/provisioner\n")
+	e.rootFile("/etc/umdns/provision.json", `{ "provision": { "service": "_provision._tcp.local", "port": 8443 } }`+"\n")
+	e.enabled["provisioner"] = true
+	if rc := e.run(); rc != 0 {
+		t.Errorf("rc %d: %s", rc, e.stderr.String())
+	}
+	e.wantServices("provisioner enable", "provisioner start")
+}
+
+func TestAStoppedServerIsStartedAgain(t *testing.T) {
+	for _, server := range []string{"provisioner", "lighttpd"} {
+		e := newEnv(t)
+		e.config["repo"] = repo
+		e.config["server"] = server
+		e.run()
+		e.running[server] = false
+		e.run()
+		e.wantServices(server+" enable", server+" start")
+		e.run()
+		e.wantServices()
+	}
+}
+
+func TestLighttpdIsNotStartedWithoutTheRepositorysConfig(t *testing.T) {
+	e := newEnv(t)
+	e.config["repo"] = repo
+	e.config["server"] = "lighttpd"
+	e.rootFile("/etc/lighttpd/lighttpd.conf", "server.port = 80\n")
+	e.lighttpdFails = true
+	e.run()
+	e.wantServices("umdns restart")
 }
 
 func TestAChangedDeviceFileRestartsNothing(t *testing.T) {

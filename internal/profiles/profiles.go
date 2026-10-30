@@ -69,8 +69,10 @@ func (f *Fetcher) Run() int {
 	}
 
 	r := &run{Fetcher: f}
+	var ready bool
 	if server == "provisioner" {
 		r.put(filepath.Join(src, "router/etc/init.d/provisioner"), "/etc/init.d/provisioner", 0o755, "root:root")
+		ready = exists(f.path("/etc/init.d/provisioner"))
 	} else {
 		r.put(filepath.Join(src, "router/www-provision/cgi-bin/provision"), "/www-provision/cgi-bin/provision", 0o755, "root:root")
 		conf := filepath.Join(src, "router/etc/lighttpd/lighttpd.conf")
@@ -81,10 +83,11 @@ func (f *Fetcher) Run() int {
 		} else {
 			r.put(conf, "/etc/lighttpd/lighttpd.conf", 0o644, "root:root")
 		}
+		ready = exists(f.path("/etc/init.d/lighttpd")) && same(conf, f.path("/etc/lighttpd/lighttpd.conf"))
 	}
 	r.put(filepath.Join(src, "router/etc/umdns/provision.json"), "/etc/umdns/provision.json", 0o644, "root:root")
 	r.devices(src)
-	r.restart(server)
+	r.restart(server, ready)
 
 	if len(r.changed) > 0 {
 		f.log("updated %s", strings.Join(r.changed, " "))
@@ -299,23 +302,25 @@ func (r *run) enabled(name string) bool {
 	return exists(init) && r.Exec(init, "enabled") == nil
 }
 
-func (r *run) restart(server string) {
-	if server == "provisioner" {
-		takeOver := r.enabled("lighttpd")
-		if takeOver {
-			r.service("lighttpd", "disable", "stop")
-		}
-		if (takeOver || r.did("/etc/init.d/provisioner")) && exists(r.path("/etc/init.d/provisioner")) {
-			r.service("provisioner", "enable", "restart")
-		}
-	} else {
-		takeOver := r.enabled("provisioner")
-		if takeOver {
-			r.service("provisioner", "disable", "stop")
-		}
-		if (takeOver || r.did("/etc/lighttpd/")) && exists(r.path("/etc/init.d/lighttpd")) {
-			r.service("lighttpd", "enable", "restart")
-		}
+func (r *run) running(name string) bool {
+	return r.Exec(r.path("/etc/init.d/"+name), "running") == nil
+}
+
+func (r *run) restart(server string, ready bool) {
+	other, config := "lighttpd", "/etc/init.d/provisioner"
+	if server == "lighttpd" {
+		other, config = "provisioner", "/etc/lighttpd/"
+	}
+	takeOver := r.enabled(other)
+	if takeOver {
+		r.service(other, "disable", "stop")
+	}
+	switch {
+	case !ready:
+	case takeOver || r.did(config):
+		r.service(server, "enable", "restart")
+	case !r.enabled(server) || !r.running(server):
+		r.service(server, "enable", "start")
 	}
 	if r.did("/etc/umdns/") {
 		r.service("umdns", "restart")

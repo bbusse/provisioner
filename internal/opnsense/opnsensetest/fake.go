@@ -77,7 +77,7 @@ func Start() *Fake {
 		Certs:  map[string]*x509.Certificate{},
 		Descrs: map[string]string{},
 	}
-	for i, name := range []string{"e2m-hqb", "e2m-0"} {
+	for i, name := range []string{"example-ca", "example-root"} {
 		ca := NewCA(name, time.Now().AddDate(2, 0, 0))
 		ca.UUID = fmt.Sprintf("ca-uuid-%d", i)
 		ca.Ref = fmt.Sprintf("caref%d", i)
@@ -167,7 +167,7 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]string{"status": "ok", "payload": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))})
 	case r.Method == "GET" && path == "wireguard/server/search_server":
 		reply(w, map[string]any{"rows": []map[string]string{
-			{"uuid": "wg-uuid", "name": "e2m", "port": "51820", "tunneladdress": "10.99.0.1/24,fd99::1/64"},
+			{"uuid": "wg-uuid", "name": "example", "port": "51820", "tunneladdress": "10.99.0.1/24,fd99::1/64"},
 		}})
 	case r.Method == "GET" && path == "wireguard/client/search_client":
 		var rows []map[string]string

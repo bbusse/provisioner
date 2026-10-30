@@ -1,1 +1,1 @@
-provision: invalid provisioning file: ValueError: users.mue.git-clone must be a table
+provision: invalid provisioning file: ValueError: users.bob.git-clone must be a table

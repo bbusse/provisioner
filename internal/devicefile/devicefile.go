@@ -2,6 +2,7 @@ package devicefile
 
 import (
 	"fmt"
+	"io"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"golang.org/x/crypto/ssh"
 )
 
 type Error struct {
@@ -61,9 +63,13 @@ type PKIFile struct {
 	PEM  string
 }
 
+// K8s is a node's cluster configuration. A master carries the cluster's
+// PKI and, when the cluster syncs with Flux, its deploy key and the Git
+// host's keys
 type K8s struct {
 	Conf []string
 	PKI  []PKIFile
+	Flux []PKIFile
 }
 
 type Config struct {
@@ -679,6 +685,24 @@ func (p *parser) k8s(root table, c *Config) error {
 			out.PKI = append(out.PKI, PKIFile{f.PEM, strings.TrimSpace(pem)})
 		}
 	}
+	flux, err := p.table(k8s, "flux", "k8s.flux")
+	if err != nil {
+		return err
+	}
+	if len(flux.values) > 0 {
+		if !master {
+			return valueError("k8s.flux is for a k8s-master")
+		}
+		identity, ok := flux.values["identity"].(string)
+		if !ok || !rePEMBlock.MatchString(identity) {
+			return valueError("k8s.flux.identity must be one PEM block")
+		}
+		hosts, ok := flux.values["known_hosts"].(string)
+		if !ok || !knownHosts(hosts) {
+			return valueError("k8s.flux.known_hosts must be known_hosts lines")
+		}
+		out.Flux = []PKIFile{{"identity", strings.TrimSpace(identity)}, {"known_hosts", strings.TrimSpace(hosts)}}
+	}
 	role := ""
 	if len(roles) == 1 {
 		role = roles[0][4:]
@@ -701,6 +725,19 @@ func (p *parser) k8s(root table, c *Config) error {
 	}
 	c.K8s = out
 	return nil
+}
+
+func knownHosts(s string) bool {
+	rest, n := []byte(s), 0
+	for {
+		var err error
+		if _, _, _, _, rest, err = ssh.ParseKnownHosts(rest); err == io.EOF {
+			return n > 0
+		} else if err != nil {
+			return false
+		}
+		n++
+	}
 }
 
 func put(dir, name string, lines []string) error {
@@ -772,6 +809,9 @@ func (c *Config) WriteOut(dir string) error {
 	if c.K8s != nil {
 		for _, f := range c.K8s.PKI {
 			add("k8s-pki/"+f.Name, []string{f.PEM}, true)
+		}
+		for _, f := range c.K8s.Flux {
+			add("k8s-flux/"+f.Name, []string{f.PEM}, true)
 		}
 		add("k8s.conf", c.K8s.Conf, true)
 	}

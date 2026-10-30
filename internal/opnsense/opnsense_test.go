@@ -22,7 +22,7 @@ func start(t *testing.T) (*opnsensetest.Fake, *Client) {
 	fake := opnsensetest.Start()
 	t.Cleanup(fake.Close)
 	_, port, _ := net.SplitHostPort(fake.Addr())
-	c, err := New("https://pathfinder-1.e2m:8888", "pathfinder-1.e2m:8888:127.0.0.1:"+port, fake.Pin(), fake.WriteKeyFile(t.TempDir()))
+	c, err := New("https://opnsense.example:8888", "opnsense.example:8888:127.0.0.1:"+port, fake.Pin(), fake.WriteKeyFile(t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +58,8 @@ func TestIsABackend(t *testing.T) {
 
 func TestCA(t *testing.T) {
 	fake, c := start(t)
-	got, err := c.CA("e2m-0")
-	if err != nil || got != fake.CA("e2m-0").PEM() {
+	got, err := c.CA("example-root")
+	if err != nil || got != fake.CA("example-root").PEM() {
 		t.Errorf("%v", err)
 	}
 	if _, err := c.CA("nope"); !errors.Is(err, ca.ErrNotFound) {
@@ -83,7 +83,7 @@ func TestSignMapsProfiles(t *testing.T) {
 		if ok, _ := c.HasCert(name); ok {
 			t.Errorf("%s exists before", name)
 		}
-		signed, err := c.Sign("e2m-hqb", ca.SignRequest{Name: name, Profile: tc.profile, CSR: csr(t, name), Days: 30,
+		signed, err := c.Sign("example-ca", ca.SignRequest{Name: name, Profile: tc.profile, CSR: csr(t, name), Days: 30,
 			DNS: []string{name}, IPs: []string{"10.0.0.7"}})
 		if err != nil {
 			t.Fatalf("%s: %v", tc.profile, err)
@@ -95,7 +95,7 @@ func TestSignMapsProfiles(t *testing.T) {
 			t.Errorf("%s is not there: %v", name, err)
 		}
 	}
-	if _, err := c.Sign("e2m-hqb", ca.SignRequest{Name: "x", Profile: "usr_cert", CSR: csr(t, "x"), Days: 1}); err == nil {
+	if _, err := c.Sign("example-ca", ca.SignRequest{Name: "x", Profile: "usr_cert", CSR: csr(t, "x"), Days: 1}); err == nil {
 		t.Error("an unknown profile")
 	}
 	if _, err := c.Sign("nope", ca.SignRequest{Name: "x", Profile: ca.ProfileClient, CSR: csr(t, "x"), Days: 1}); !errors.Is(err, ca.ErrNotFound) {
@@ -105,7 +105,7 @@ func TestSignMapsProfiles(t *testing.T) {
 
 func TestAddPeer(t *testing.T) {
 	fake, c := start(t)
-	peer, err := c.AddPeer("e2m", "dev", ca.PeerRequest{PublicKey: "devpub=", PresharedKey: "psk="})
+	peer, err := c.AddPeer("example", "dev", ca.PeerRequest{PublicKey: "devpub=", PresharedKey: "psk="})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestAddPeer(t *testing.T) {
 	if fake.Requests[len(fake.Requests)-1] != "POST wireguard/service/reconfigure" {
 		t.Errorf("no reconfigure: %v", fake.Requests)
 	}
-	if _, err := c.AddPeer("e2m", "dev", ca.PeerRequest{PublicKey: "x"}); !errors.Is(err, ca.ErrExists) {
+	if _, err := c.AddPeer("example", "dev", ca.PeerRequest{PublicKey: "x"}); !errors.Is(err, ca.ErrExists) {
 		t.Errorf("a second peer: %v", err)
 	}
 	if _, err := c.AddPeer("nope", "dev2", ca.PeerRequest{PublicKey: "x"}); !errors.Is(err, ca.ErrNotFound) {
@@ -132,12 +132,12 @@ func TestPin(t *testing.T) {
 	fake := opnsensetest.Start()
 	defer fake.Close()
 	_, port, _ := net.SplitHostPort(fake.Addr())
-	c, err := New("https://pathfinder-1.e2m:8888", "pathfinder-1.e2m:8888:127.0.0.1:"+port,
+	c, err := New("https://opnsense.example:8888", "opnsense.example:8888:127.0.0.1:"+port,
 		"sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", fake.WriteKeyFile(t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.CA("e2m-hqb"); err == nil || !strings.Contains(err.Error(), "OPNSENSE_PIN") {
+	if _, err := c.CA("example-ca"); err == nil || !strings.Contains(err.Error(), "OPNSENSE_PIN") {
 		t.Errorf("%v", err)
 	}
 	if _, err := New("https://x", "", "", "/nonexistent"); err == nil {
@@ -150,15 +150,15 @@ func TestRegistered(t *testing.T) {
 	defer fake.Close()
 	_, port, _ := net.SplitHostPort(fake.Addr())
 	b, err := ca.Open("opnsense", settings.Env{
-		"OPNSENSE_URL":          "https://pathfinder-1.e2m:8888",
-		"OPNSENSE_CONNECT_TO":   "pathfinder-1.e2m:8888:127.0.0.1:" + port,
+		"OPNSENSE_URL":          "https://opnsense.example:8888",
+		"OPNSENSE_CONNECT_TO":   "opnsense.example:8888:127.0.0.1:" + port,
 		"OPNSENSE_PIN":          fake.Pin(),
 		"OPNSENSE_API_KEY_FILE": fake.WriteKeyFile(t.TempDir()),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := b.CA("e2m-hqb"); err != nil || got != fake.CA("e2m-hqb").PEM() {
+	if got, err := b.CA("example-ca"); err != nil || got != fake.CA("example-ca").PEM() {
 		t.Errorf("%v", err)
 	}
 	if _, err := ca.Open("", settings.Env{}); err == nil || !strings.Contains(err.Error(), "one of: opnsense") {

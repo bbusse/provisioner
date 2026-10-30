@@ -2,7 +2,7 @@
 roles = ["k8s-master"]
 
 [k8s]
-cluster = "e2m"
+cluster = "example"
 token = "abcdef.0123456789abcdef"
 ca_cert_hash = "sha256:abababababababababababababababababababababababababababababababab"
 bootstrap = true

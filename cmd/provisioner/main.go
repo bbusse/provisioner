@@ -19,22 +19,25 @@ import (
 	"github.com/bbusse/provisioner/internal/mtls"
 	_ "github.com/bbusse/provisioner/internal/opnsense"
 	"github.com/bbusse/provisioner/internal/profiles"
-	"github.com/bbusse/provisioner/internal/router"
+	"github.com/bbusse/provisioner/internal/provide"
 	"github.com/bbusse/provisioner/internal/settings"
 )
 
 const usage = `usage: provisioner serve
-       provisioner router [-listen :8443] [-cert FILE] [-key FILE] [-ca FILE] [-dir DIR]
+       provisioner provide [-listen :8443] [-cert FILE] [-key FILE] [-ca FILE] [-dir DIR]
        provisioner fetch USER
        provisioner fetch-profiles
-       provisioner [-local] signer
-       provisioner [-local] server NAME [SAN...]
-       provisioner [-local] device NAME
-       provisioner [-local] config NAME [-user USER] [-roles ROLE,...] [-timezone ZONE] [-ssh-key KEY]... [-k8s CLUSTER:master|client] [-no-wg]
-       provisioner [-local] cluster NAME [-endpoint HOST:PORT] [-method mdns|dns] [-pod-cidr CIDR] [-service-cidr CIDR]
-       provisioner [-local] k8s DEVICE CLUSTER master|client
-       provisioner [-local] seal [NAME...]
-       provisioner [-local] open NAME
+       provisioner signer
+       provisioner server NAME [SAN...]
+       provisioner device NAME
+       provisioner config NAME [-user USER] [-roles ROLE,...] [-timezone ZONE] [-ssh-key KEY]... [-k8s CLUSTER:master|client] [-no-wg]
+       provisioner cluster NAME [-endpoint HOST:PORT] [-method mdns|dns] [-pod-cidr CIDR] [-service-cidr CIDR]
+       provisioner flux CLUSTER ssh://USER@HOST[:PORT]/PATH
+       provisioner k8s DEVICE CLUSTER master|client
+       provisioner k8s export DEVICE
+       provisioner k8s deploy DEVICE HOST
+       provisioner seal [NAME...]
+       provisioner open NAME
        provisioner devices
 `
 
@@ -114,6 +117,13 @@ func parse(cmd string, args []string) (call, error) {
 			return call{}, bad
 		}
 		return call{"POST", "/v1/clusters/" + o.Name, o, func(j *jobs.Jobs) error { return j.Cluster(o) }}, nil
+	case "flux":
+		if len(args) != 2 {
+			return call{}, bad
+		}
+		cluster, repo := args[0], args[1]
+		return call{"POST", "/v1/clusters/" + cluster + "/flux", map[string]string{"url": repo},
+			func(j *jobs.Jobs) error { return j.Flux(cluster, repo) }}, nil
 	case "k8s":
 		if len(args) != 3 {
 			return call{}, bad
@@ -163,7 +173,6 @@ func serve() {
 }
 
 func main() {
-	local := flag.Bool("local", false, "run the job here instead of asking the daemon")
 	flag.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	flag.Parse()
 	args := flag.Args()
@@ -175,8 +184,9 @@ func main() {
 	case "serve":
 		serve()
 		return
-	case "router":
-		router.Run(args[1:])
+	// router is the deprecated and undocumented name of provide
+	case "provide", "router":
+		provide.Run(args[1:])
 		return
 	case "fetch":
 		user := ""
@@ -189,14 +199,33 @@ func main() {
 		os.Exit(fetchProfiles())
 	}
 
+	// Jobs run here on the data in PROVISIONER_DATA, or on the daemon at
+	// PROVISIONER_URL when that is set
+	url := os.Getenv("PROVISIONER_URL")
 	if args[0] == "devices" {
-		client := newClient()
 		var devices []api.Device
-		if err := client.Do("GET", "/v1/devices", nil, &devices); err != nil {
+		if url == "" {
+			devices = localJobs().Store.List()
+		} else if err := newClient(url).Do("GET", "/v1/devices", nil, &devices); err != nil {
 			die("%v", err)
 		}
 		for _, d := range devices {
 			fmt.Printf("%-24s plain=%t sealed=%t cert=%t\n", d.Name, d.Plain, d.Sealed, d.Cert)
+		}
+		return
+	}
+
+	// export and deploy hand out the cluster's keys, which the API never
+	// does, so they always run here
+	if args[0] == "k8s" && len(args) == 3 && args[1] == "export" {
+		if err := localJobs().Export(args[2], os.Stdout); err != nil {
+			die("%v", err)
+		}
+		return
+	}
+	if args[0] == "k8s" && len(args) == 4 && args[1] == "deploy" {
+		if err := localJobs().Deploy(args[2], args[3]); err != nil {
+			die("%v", err)
 		}
 		return
 	}
@@ -206,19 +235,14 @@ func main() {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(2)
 	}
-	if *local {
-		s, err := settings.Load()
-		if err != nil {
-			die("%v", err)
-		}
-		j := jobs.New(s, func(format string, args ...any) { fmt.Printf(format+"\n", args...) })
-		if err := c.local(j); err != nil {
+	if url == "" {
+		if err := c.local(localJobs()); err != nil {
 			die("%v", err)
 		}
 		return
 	}
 	var resp api.Response
-	if err := newClient().Do(c.method, c.path, c.body, &resp); err != nil {
+	if err := newClient(url).Do(c.method, c.path, c.body, &resp); err != nil {
 		die("%v", err)
 	}
 	for _, line := range resp.Log {
@@ -227,6 +251,14 @@ func main() {
 	if resp.Error != "" {
 		die("%s", resp.Error)
 	}
+}
+
+func localJobs() *jobs.Jobs {
+	s, err := settings.Load()
+	if err != nil {
+		die("%v", err)
+	}
+	return jobs.New(s, func(format string, args ...any) { fmt.Printf(format+"\n", args...) })
 }
 
 func fetchProfiles() int {
@@ -262,11 +294,7 @@ func fetchProfiles() int {
 	return f.Run()
 }
 
-func newClient() *api.Client {
-	url := os.Getenv("PROVISIONER_URL")
-	if url == "" {
-		url = "https://localhost:8444"
-	}
+func newClient(url string) *api.Client {
 	client, err := api.NewClient(url, os.Getenv("PROVISIONER_CERT"), os.Getenv("PROVISIONER_KEY"), os.Getenv("PROVISIONER_SERVER_CA"))
 	if err != nil {
 		die("%v", err)

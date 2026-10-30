@@ -1,4 +1,4 @@
-package router
+package provide
 
 import (
 	"crypto"
@@ -108,7 +108,7 @@ func setup(t *testing.T) *testEnv {
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
 	root := t.TempDir()
-	e := &testEnv{ca: newCA(t, "e2m-test", nil), dir: filepath.Join(root, "provision")}
+	e := &testEnv{ca: newCA(t, "test-ca", nil), dir: filepath.Join(root, "provision")}
 	if err := os.Mkdir(e.dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func setup(t *testing.T) *testEnv {
 		ca:   filepath.Join(e.dir, "ca.pem"),
 		dir:  e.dir,
 	}
-	server := e.ca.issue(t, "router", x509.ExtKeyUsageServerAuth)
+	server := e.ca.issue(t, "test-provisioner", x509.ExtKeyUsageServerAuth)
 	keyDER, err := x509.MarshalPKCS8PrivateKey(server.PrivateKey)
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +239,7 @@ func TestHead(t *testing.T) {
 func TestRefusedClients(t *testing.T) {
 	e := setup(t)
 	writeFile(t, filepath.Join(e.dir, "testdev.cms"), []byte("sealed"))
-	other := newCA(t, "e2m-test", nil)
+	other := newCA(t, "test-ca", nil)
 	intermediate := newCA(t, "intermediate", e.ca)
 	viaIntermediate := client(t, intermediate, "testdev")
 	viaIntermediate.Certificate = append(viaIntermediate.Certificate, intermediate.cert.Raw)
@@ -309,7 +309,7 @@ func TestQueryIgnored(t *testing.T) {
 func TestReloadsCA(t *testing.T) {
 	e := setup(t)
 	writeFile(t, filepath.Join(e.dir, "testdev.cms"), []byte("sealed"))
-	next := newCA(t, "e2m-next", nil)
+	next := newCA(t, "test-ca-next", nil)
 	dev := client(t, next, "testdev")
 	if _, _, err := e.do(t, http.MethodGet, "/cgi-bin/provision", dev); err == nil {
 		t.Fatal("certificate from the next CA accepted before the reload")

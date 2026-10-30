@@ -96,7 +96,7 @@ type Fake struct {
 
 func New() *Fake {
 	f := &Fake{Certs: map[string]*x509.Certificate{}}
-	for _, name := range []string{"e2m-hqb", "e2m-0"} {
+	for _, name := range []string{"example-ca", "example-root"} {
 		f.CAs = append(f.CAs, NewCA(name, time.Now().AddDate(2, 0, 0)))
 	}
 	return f

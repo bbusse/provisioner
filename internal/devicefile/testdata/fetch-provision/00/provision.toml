@@ -1,7 +1,7 @@
 
 [system]
-hostname = "rw-vfm"
-user = "mue"
+hostname = "test-host"
+user = "bob"
 roles = ["tv", "wg"]
 timezone = "Europe/Berlin"
 

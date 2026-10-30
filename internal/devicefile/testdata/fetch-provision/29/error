@@ -1,1 +1,1 @@
-provision: invalid provisioning file: ValueError: users.mue.shell must be a shell name or path
+provision: invalid provisioning file: ValueError: users.bob.shell must be a shell name or path

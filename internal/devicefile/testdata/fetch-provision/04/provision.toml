@@ -2,8 +2,8 @@
 [users.zed]
 shell = "zsh"
 authorized_keys = ["ssh-ed25519 AAAA a@b"]
-git-clone = ["https://github.com/bbusse/dotfiles",
-             { url = "git@github.com:bbusse/notes.git", dest = "~/notes", ref = "main" },
+git-clone = ["https://github.com/example/dotfiles",
+             { url = "git@github.com:example/notes.git", dest = "~/notes", ref = "main" },
              "ssh://git@host/x/y/"]
 
 [users.zed.env]
@@ -14,7 +14,7 @@ ALPHA = "  spaced  "
 [users.alpha]
 env = { B = "2", A = "1" }
 
-[users.mue.systemd."syncthing.service"]
+[users.bob.systemd."syncthing.service"]
 content = """
 [Service]
 ExecStart=/usr/bin/syncthing serve
@@ -23,7 +23,7 @@ ExecStart=/usr/bin/syncthing serve
 WantedBy=default.target
 """
 
-[users.mue.systemd."syncthing.service.d/10-gui.conf"]
+[users.bob.systemd."syncthing.service.d/10-gui.conf"]
 content = """
 [Service]
 Environment=X=1

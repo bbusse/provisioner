@@ -31,17 +31,17 @@ func leaf(t *testing.T, c *catest.CA, cn string, usage x509.ExtKeyUsage, dir str
 func TestAPI(t *testing.T) {
 	dir := t.TempDir()
 	fake := catest.New()
-	hqb := fake.Named("e2m-hqb")
+	issuer := fake.Named("example-ca")
 	caPath := filepath.Join(dir, "ca.pem")
-	os.WriteFile(caPath, []byte(hqb.PEM()), 0o600)
-	serverCert, serverKey := leaf(t, hqb, "provisioner", x509.ExtKeyUsageServerAuth, dir)
-	adminCert, adminKey := leaf(t, hqb, "admin-test", x509.ExtKeyUsageClientAuth, dir)
-	devCert, devKey := leaf(t, hqb, "dev9", x509.ExtKeyUsageClientAuth, dir)
+	os.WriteFile(caPath, []byte(issuer.PEM()), 0o600)
+	serverCert, serverKey := leaf(t, issuer, "provisioner", x509.ExtKeyUsageServerAuth, dir)
+	adminCert, adminKey := leaf(t, issuer, "admin-test", x509.ExtKeyUsageClientAuth, dir)
+	devCert, devKey := leaf(t, issuer, "dev9", x509.ExtKeyUsageClientAuth, dir)
 	strangerCert, strangerKey := leaf(t, catest.NewCA("other", time.Now().Add(time.Hour)), "admin-test2", x509.ExtKeyUsageClientAuth, dir)
 
 	s := &settings.Settings{
-		CAName: "e2m-hqb", CertDays: 397, KeyType: "ec",
-		WGInstance: "e2m", WGKeepalive: 25, K8sParentCA: "e2m-0", K8sCADays: 3650,
+		CAName: "example-ca", CertDays: 397, KeyType: "ec",
+		WGInstance: "example", WGKeepalive: 25, K8sParentCA: "example-root", K8sCADays: 3650,
 		CertsDir: filepath.Join(dir, "data", "certs"), PlainDir: filepath.Join(dir, "data", "plain"),
 		DevicesDir: filepath.Join(dir, "data", "devices"),
 		TLSCert:    serverCert, TLSKey: serverKey, ClientCA: caPath, Admins: []string{"admin-test"},
@@ -70,7 +70,7 @@ func TestAPI(t *testing.T) {
 		t.Fatalf("signer: %v %v", err, resp)
 	}
 	resp = Response{}
-	if err := admin.Do("POST", "/v1/devices/dev/config", map[string]any{"user": "mue", "no_wg": true}, &resp); err != nil || resp.Error != "" {
+	if err := admin.Do("POST", "/v1/devices/dev/config", map[string]any{"user": "bob", "no_wg": true}, &resp); err != nil || resp.Error != "" {
 		t.Fatalf("config: %v %+v", err, resp)
 	}
 	if !strings.Contains(strings.Join(resp.Log, "\n"), "provision-add-trust DISK dev") {

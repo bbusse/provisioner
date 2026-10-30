@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	osuser "os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -301,6 +302,36 @@ func (f *Fetcher) open(body []byte, server string, t trust) ([]byte, bool) {
 	return content, true
 }
 
+func inSessionOf(cgroup []byte, uid string) bool {
+	return strings.Contains(string(cgroup), "/user-"+uid+".slice/")
+}
+
+func detachArgs(exe, user string, getenv func(string) string) []string {
+	args := []string{"--unit=provision-fetch", "--collect", "--quiet"}
+	for _, k := range []string{"PATH", "PROVISION_ESP", "PROVISION_TIME_WAIT", "PROVISION_MDNS_TIMEOUT"} {
+		if v := getenv(k); v != "" {
+			args = append(args, "--setenv="+k+"="+v)
+		}
+	}
+	return append(args, exe, "fetch", user)
+}
+
+func (f *Fetcher) detach(user string) int {
+	exe, err := os.Executable()
+	if err == nil {
+		cmd := exec.Command("systemd-run", detachArgs(exe, user, f.Getenv)...)
+		cmd.Stdout = f.Stdout
+		cmd.Stderr = f.Stderr
+		err = cmd.Run()
+	}
+	if err != nil {
+		f.warn("could not run outside the sessions of %s: %v", user, err)
+		return 1
+	}
+	f.say("running as provision-fetch.service, which may end the sessions of %s: journalctl -u provision-fetch", user)
+	return 0
+}
+
 func (f *Fetcher) Run(user string) int {
 	if info, err := os.Stat("/home/" + user); user == "" || err != nil || !info.IsDir() {
 		f.warn("no image user home, nothing to provision")
@@ -310,6 +341,12 @@ func (f *Fetcher) Run(user string) int {
 	if len(t.cert) == 0 || len(t.key) == 0 {
 		f.say("no client certificate on the ESP, nothing to fetch")
 		return 0
+	}
+	if account, err := osuser.Lookup(user); err == nil {
+		cgroup, _ := os.ReadFile("/proc/self/cgroup")
+		if inSessionOf(cgroup, account.Uid) {
+			return f.detach(user)
+		}
 	}
 	f.waitForClock()
 	server := f.discover()

@@ -33,12 +33,12 @@ func setup(t *testing.T) *env {
 	dir := t.TempDir()
 	fake := catest.New()
 	s := &settings.Settings{
-		CAName:      "e2m-hqb",
+		CAName:      "example-ca",
 		CertDays:    397,
 		KeyType:     "ec",
-		WGInstance:  "e2m",
+		WGInstance:  "example",
 		WGKeepalive: 25,
-		K8sParentCA: "e2m-0",
+		K8sParentCA: "example-root",
 		K8sCADays:   3650,
 		CertsDir:    filepath.Join(dir, "certs"),
 		PlainDir:    filepath.Join(dir, "plain"),
@@ -84,7 +84,7 @@ func (e *env) opens(name, as string) string {
 	data, err := os.ReadFile(e.j.Store.SealedPath(name))
 	e.must(err)
 	roots := x509.NewCertPool()
-	roots.AddCert(e.fake.Named("e2m-hqb").Cert)
+	roots.AddCert(e.fake.Named("example-ca").Cert)
 	content, _, err := cms.Open(data, cert, key, roots, time.Now())
 	e.must(err)
 	return string(content)
@@ -113,10 +113,10 @@ func TestSignerServerAndDevice(t *testing.T) {
 		t.Errorf("signer %v", signer.Subject)
 	}
 
-	e.must(e.j.Server("provisioner.e2m", []string{"10.0.0.7", "alt.e2m"}))
-	server, err := pki.ReadCert(e.j.Store.CertPath("provisioner.e2m"))
+	e.must(e.j.Server("provisioner.example", []string{"10.0.0.7", "alt.example"}))
+	server, err := pki.ReadCert(e.j.Store.CertPath("provisioner.example"))
 	e.must(err)
-	if strings.Join(server.DNSNames, ",") != "provisioner.e2m,alt.e2m" || server.IPAddresses[0].String() != "10.0.0.7" {
+	if strings.Join(server.DNSNames, ",") != "provisioner.example,alt.example" || server.IPAddresses[0].String() != "10.0.0.7" {
 		t.Errorf("server SANs %v %v", server.DNSNames, server.IPAddresses)
 	}
 	if err := e.j.Server("bad", []string{"not a name"}); err == nil {
@@ -162,7 +162,7 @@ func TestSignerServerAndDevice(t *testing.T) {
 func TestDeviceRefusesASecondPeerOfTheSameName(t *testing.T) {
 	e := setup(t)
 	e.signer()
-	e.fake.Peers = append(e.fake.Peers, catest.Peer{Instance: "e2m", Name: "dev"})
+	e.fake.Peers = append(e.fake.Peers, catest.Peer{Instance: "example", Name: "dev"})
 	if err := e.j.Device("dev"); err == nil || !strings.Contains(err.Error(), "already has a peer named dev") {
 		t.Errorf("%v", err)
 	}
@@ -170,13 +170,13 @@ func TestDeviceRefusesASecondPeerOfTheSameName(t *testing.T) {
 
 func TestClusterThroughTheCA(t *testing.T) {
 	e := setup(t)
-	e.must(e.j.Cluster(ClusterOptions{Name: "e2m"}))
-	d := filepath.Join(e.j.S.CertsDir, "k8s-e2m")
+	e.must(e.j.Cluster(ClusterOptions{Name: "example"}))
+	d := filepath.Join(e.j.S.CertsDir, "k8s-example")
 	ca, err := pki.ReadCert(filepath.Join(d, "ca.crt"))
 	e.must(err)
 	parent, err := pki.ReadCert(filepath.Join(d, "parent.pem"))
 	e.must(err)
-	if !ca.IsCA || ca.Subject.CommonName != "k8s-e2m" || !parent.Equal(e.fake.Named("e2m-0").Cert) {
+	if !ca.IsCA || ca.Subject.CommonName != "k8s-example" || !parent.Equal(e.fake.Named("example-root").Cert) {
 		t.Errorf("cluster CA %v under %v", ca.Subject, parent.Subject)
 	}
 	roots := x509.NewCertPool()
@@ -189,7 +189,7 @@ func TestClusterThroughTheCA(t *testing.T) {
 	}
 	_, err = toml.DecodeFile(filepath.Join(d, "k8s.toml"), &k8s)
 	e.must(err)
-	if k8s.K8s["ca_cert_hash"] != pki.CACertHash(ca) || k8s.K8s["endpoint"] != "e2m.k8s.internal:6443" ||
+	if k8s.K8s["ca_cert_hash"] != pki.CACertHash(ca) || k8s.K8s["endpoint"] != "example.k8s.internal:6443" ||
 		k8s.K8s["endpoint_method"] != "mdns" || !regexp.MustCompile(`^[a-z0-9]{6}\.[a-z0-9]{16}$`).MatchString(k8s.K8s["token"]) {
 		t.Errorf("k8s.toml %v", k8s.K8s)
 	}
@@ -197,11 +197,11 @@ func TestClusterThroughTheCA(t *testing.T) {
 	if info.Mode().Perm() != 0o700 {
 		t.Errorf("mode %v", info.Mode())
 	}
-	if err := e.j.Cluster(ClusterOptions{Name: "e2m"}); err == nil {
+	if err := e.j.Cluster(ClusterOptions{Name: "example"}); err == nil {
 		t.Error("a cluster made twice")
 	}
 	os.RemoveAll(d)
-	if err := e.j.Cluster(ClusterOptions{Name: "e2m"}); err == nil || !strings.Contains(err.Error(), "has a certificate named k8s-e2m already") {
+	if err := e.j.Cluster(ClusterOptions{Name: "example"}); err == nil || !strings.Contains(err.Error(), "has a certificate named k8s-example already") {
 		t.Errorf("%v", err)
 	}
 	if _, err := os.Stat(d); err == nil {
@@ -236,16 +236,16 @@ func TestClusterWithALocalParentLivesNoLongerThanIt(t *testing.T) {
 func TestMastersAndClients(t *testing.T) {
 	e := setup(t)
 	e.signer()
-	e.must(e.j.Cluster(ClusterOptions{Name: "e2m"}))
+	e.must(e.j.Cluster(ClusterOptions{Name: "example"}))
 	e.must(e.j.Cluster(ClusterOptions{Name: "other"}))
 	for _, name := range []string{"m1", "m2", "c1", "o1"} {
 		e.device(name)
 	}
-	e.must(e.j.K8s("m1", "e2m", "master"))
-	e.must(e.j.K8s("c1", "e2m", "client"))
+	e.must(e.j.K8s("m1", "example", "master"))
+	e.must(e.j.K8s("c1", "example", "client"))
 	e.must(e.j.K8s("o1", "other", "master"))
 	os.Remove(e.j.Store.PlainPath("m1"))
-	e.must(e.j.K8s("m2", "e2m", "master"))
+	e.must(e.j.K8s("m2", "example", "master"))
 
 	k8s := func(name string) map[string]any {
 		cfg := e.plain(name)
@@ -262,7 +262,7 @@ func TestMastersAndClients(t *testing.T) {
 		t.Error("a client got the PKI")
 	}
 	pki := k8s("m2")["pki"].(map[string]any)
-	key, _ := os.ReadFile(filepath.Join(e.j.S.CertsDir, "k8s-e2m", "ca.key"))
+	key, _ := os.ReadFile(filepath.Join(e.j.S.CertsDir, "k8s-example", "ca.key"))
 	if len(pki) != 8 || strings.TrimSpace(pki["ca_key"].(string)) != strings.TrimSpace(string(key)) {
 		t.Errorf("master pki %d", len(pki))
 	}
@@ -273,7 +273,7 @@ func TestMastersAndClients(t *testing.T) {
 	if e.opens("m2", "m2") != string(plain) {
 		t.Error("m2 is not sealed")
 	}
-	if err := e.j.K8s("c1", "e2m", "master"); err == nil || !strings.Contains(err.Error(), "has a [k8s] section already") {
+	if err := e.j.K8s("c1", "example", "master"); err == nil || !strings.Contains(err.Error(), "has a [k8s] section already") {
 		t.Errorf("%v", err)
 	}
 	if err := e.j.K8s("m2", "nocluster", "master"); err == nil {
@@ -290,13 +290,13 @@ func TestMastersAndClients(t *testing.T) {
 func TestConfig(t *testing.T) {
 	e := setup(t)
 	e.signer()
-	e.must(e.j.Cluster(ClusterOptions{Name: "e2m"}))
-	key := `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake "mue" \laptop`
-	e.must(e.j.Config(ConfigOptions{Name: "dev", User: "mue", Roles: []string{"tv"}, Timezone: "Europe/Berlin",
-		SSHKeys: []string{key}, K8s: "e2m:master"}))
+	e.must(e.j.Cluster(ClusterOptions{Name: "example"}))
+	key := `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake "bob" \laptop`
+	e.must(e.j.Config(ConfigOptions{Name: "dev", User: "bob", Roles: []string{"tv"}, Timezone: "Europe/Berlin",
+		SSHKeys: []string{key}, K8s: "example:master"}))
 	cfg := e.plain("dev")
 	system := cfg["system"].(map[string]any)
-	if system["user"] != "mue" || system["timezone"] != "Europe/Berlin" || fmt.Sprint(system["roles"]) != "[tv wg k8s-master]" {
+	if system["user"] != "bob" || system["timezone"] != "Europe/Berlin" || fmt.Sprint(system["roles"]) != "[tv wg k8s-master]" {
 		t.Errorf("system %v", system)
 	}
 	if cfg["ssh"].(map[string]any)["authorized_keys"].([]any)[0] != key {
@@ -320,8 +320,8 @@ func TestConfig(t *testing.T) {
 	}
 	requests := len(e.fake.Requests)
 	for _, o := range []ConfigOptions{
-		{Name: "x", User: "Mue"}, {Name: "x", Roles: []string{"../x"}}, {Name: "x", Timezone: "Europe/../x"},
-		{Name: "x", SSHKeys: []string{"not-a-key"}}, {Name: "x", K8s: "nocluster:master"}, {Name: "x", K8s: "e2m:worker"},
+		{Name: "x", User: "Bob"}, {Name: "x", Roles: []string{"../x"}}, {Name: "x", Timezone: "Europe/../x"},
+		{Name: "x", SSHKeys: []string{"not-a-key"}}, {Name: "x", K8s: "nocluster:master"}, {Name: "x", K8s: "example:worker"},
 		{Name: "../x"}, {Name: store.SignerName},
 	} {
 		if err := e.j.Config(o); err == nil {

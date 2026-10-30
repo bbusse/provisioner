@@ -1,2 +1,2 @@
-[users.mue]
+[users.bob]
 git-clone = [{ url = "https://h/a/b", dest = "relative" }]
